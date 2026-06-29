@@ -1,0 +1,3 @@
+# build artifacts (release assets are the only stored copy)
+/dist/
+/nfpm-*.yaml

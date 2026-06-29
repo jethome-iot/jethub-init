@@ -1,0 +1,54 @@
+name: release init script packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Render per-board nfpm configs
+        run: |
+          mkdir -p dist
+          for b in j80 j100 j200; do sed "s/@BOARD@/$b/g" .github/nfpm.yaml > "nfpm-$b.yaml"; done
+
+      - name: Build armbian .deb (j80)
+        uses: secondlife/action-nfpm@v2
+        with: { checkout: false, packager: deb, config: nfpm-j80.yaml, target: dist/jethub-init-j80_${{ env.VERSION }}.deb }
+
+      - name: Build armbian .deb (j100)
+        uses: secondlife/action-nfpm@v2
+        with: { checkout: false, packager: deb, config: nfpm-j100.yaml, target: dist/jethub-init-j100_${{ env.VERSION }}.deb }
+
+      - name: Build armbian .deb (j200)
+        uses: secondlife/action-nfpm@v2
+        with: { checkout: false, packager: deb, config: nfpm-j200.yaml, target: dist/jethub-init-j200_${{ env.VERSION }}.deb }
+
+      - name: Build haos-ash archive
+        run: mkdir -p dist && tar -czf "dist/jethub-init-haos_${VERSION}.tar.gz" haos-ash
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/jethub-init-j80_${VERSION}.deb \
+            dist/jethub-init-j100_${VERSION}.deb \
+            dist/jethub-init-j200_${VERSION}.deb \
+            dist/jethub-init-haos_${VERSION}.tar.gz \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
+
+      - name: Cleanup workspace
+        if: always()
+        run: rm -rf dist nfpm-*.yaml

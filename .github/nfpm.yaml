@@ -1,0 +1,27 @@
+name: jethub-init-@BOARD@
+arch: all
+platform: linux
+version: ${VERSION}
+maintainer: JetHome <noreply@jethome.com>
+section: utils
+priority: optional
+provides:
+  - jethub-init
+conflicts:
+  - jethub-init
+replaces:
+  - jethub-init
+description: |
+  JetHub @BOARD@ board init (GPIO/LED/zigbee) for Armbian.
+  jethub-init entrypoint plus the @BOARD@ libjethubconfig.sh.
+depends:
+  - gpiod
+contents:
+  - src: armbian/jethub-init
+    dst: /usr/lib/armbian/jethub-init
+    file_info:
+      mode: 0755
+  - src: armbian/@BOARD@/libjethubconfig.sh
+    dst: /usr/lib/armbian/libjethubconfig.sh
+  - src: armbian/jethub-initer.service
+    dst: /lib/systemd/system/jethub-initer.service

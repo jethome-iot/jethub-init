@@ -1,0 +1,70 @@
+#!/bin/sh
+
+# shellcheck source=/dev/null
+. /usr/lib/jethome/libjethubconfig.sh
+
+# Include jethub-init defaults if available
+[ -f /etc/default/jethub ] && . /etc/default/jethub
+
+GPIOSET=${GPIOSET:-/usr/bin/gpioset}
+GPIOINFO=${GPIOINFO:-/usr/bin/gpioinfo}
+
+### define functions
+
+# gset <name=value>...  — set named line(s) and exit (sticky holds the value)
+gset() {
+    "${GPIOSET}" --toggle 0 --by-name "$@" \
+        || { echo "${0}: *** Error: gpioset $* failed"; return 1; }
+}
+
+# gpulse <name>  — drive named line HIGH for 500ms, then LOW
+gpulse() {
+    name="${1}"
+    "${GPIOSET}" --toggle 500ms,0 --by-name "${name}=1" \
+        || echo "${0}: *** Error: pulse on ${name} failed"
+}
+
+# wait_line <name>  — wait up to 5s for a named line to become usable
+wait_line() {
+    name="${1}"
+    i=0
+    while [ "${i}" -lt 50 ]; do
+        "${GPIOINFO}" "${name}" >/dev/null 2>&1 && return 0
+        sleep 0.1
+        i=$((i + 1))
+    done
+    echo "${0}: *** Error: gpio line '${name}' not available"
+    return 1
+}
+
+# gpio_set <chip> <line> <value> <active-level>  — set value by chip+line
+gpio_set() {
+    chip="${1}"; line="${2}"; value="${3}"; low="${4}"
+    if [ "${low}" = "${GPIO_ACTIVE_LOW}" ]; then
+        "${GPIOSET}" --toggle 0 --active-low -c "gpiochip${chip}" "${line}=${value}" \
+            || { echo "${0}: *** Error: gpioset gpiochip${chip} ${line}=${value} failed"; return 1; }
+    else
+        "${GPIOSET}" --toggle 0 -c "gpiochip${chip}" "${line}=${value}" \
+            || { echo "${0}: *** Error: gpioset gpiochip${chip} ${line}=${value} failed"; return 1; }
+    fi
+}
+
+configure_led() {
+    echo "${0}: Configure LED: chip=${1} line=${2} state=${3} active_level=${4}"
+    gpio_set "${1}" "${2}" "${3}" "${4}"
+}
+
+### end define functions
+
+### begin
+
+if [ -n "${ADDITIONALFUNC}" ]; then
+    for func in ${ADDITIONALFUNC}; do
+        echo "${0}: Start additional init function ${func}"
+        ${func} || echo "${0}: *** Error: ${func} failed"
+    done
+fi
+
+echo "${0}: Initialization done"
+
+exit 0

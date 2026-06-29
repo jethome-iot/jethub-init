@@ -1,0 +1,196 @@
+#!/bin/bash
+
+declare -g LEDS
+declare -g -A GPIOCHIPBASE
+
+RP=$(realpath "${0}")
+SCRIPTPATH=$(dirname "${RP}")
+
+# shellcheck source=/dev/null
+source "${SCRIPTPATH}/libjethubconfig.sh"
+
+# Include jethub-init defaults if available
+if [ -f /etc/default/jethub ] ; then
+    . /etc/default/jethub
+fi
+
+GPIOSET=${GPIOSET:-/usr/bin/gpioset}
+GPIOINFO=${GPIOINFO:-/usr/bin/gpioinfo}
+GPIOFIND=${GPIOFIND:-/usr/bin/gpiofind}
+
+### backend detection ###################################################
+
+# Auto-select backend by libgpiod major version (>= 2 -> gpiod, else sysfs).
+detect_backend()
+{
+    local ver major
+    ver=$("${GPIOSET}" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+    major=${ver%%.*}
+    if [ "${major:-0}" -ge 2 ] 2>/dev/null; then
+        ENABLESYSFS=false
+        echo "${0}: backend=gpiod (libgpiod v${ver})"
+    elif [ -e /sys/class/gpio/export ]; then
+        ENABLESYSFS=true
+        echo "${0}: backend=sysfs (libgpiod v${ver:-?} < 2 or absent)"
+    else
+        echo "${0}: *** Error: no usable GPIO backend"
+        exit 1
+    fi
+}
+
+### define functions
+
+configure_gpiobase()
+{
+    declare -g GPIOBASE
+    declare -g GPIOCHIP
+    for gpiochipsys in /sys/class/gpio/gpiochip*/; do
+        gpiochipsys=${gpiochipsys%*/}
+        gpiochiptemp=$(find "${gpiochipsys}"/device/gpiochip* -type d | head -n 1)
+        GPIOCHIP=${gpiochiptemp##*/}
+        GPIOBASE=$(cat "${gpiochipsys}/base")
+        GPIOCHIPBASE["$(echo "${GPIOCHIP}" | tr -d -c 0-9)"]=${GPIOBASE}
+    done
+    if [[ -z "${GPIOBASE}" ]]; then
+        echo Can not find gpiochip and base number
+        exit 1
+    fi
+}
+
+unexport_sysfs()
+{
+    for i in /sys/class/gpio/gpio* ; do
+        if ! echo "$i" | grep -q chip ; then
+                ii=$(echo "${i##*/}"| tr -d -c 0-9)
+                echo "$ii" > /sys/class/gpio/unexport
+        fi
+    done
+}
+
+# sysfs_name_num <name> resolve a line name to a global sysfs number using gpiofind
+sysfs_name_num()
+{
+    local name="${1}" ref chip line base
+    ref=$("${GPIOFIND}" "${name}" 2>/dev/null) || return 1   # "gpiochipN M"
+    chip=${ref%% *}; line=${ref##* }
+    base="${GPIOCHIPBASE[$(echo "${chip}" | tr -d -c 0-9)]}"
+    [ -n "${base}" ] || return 1
+    echo $((base + line))
+}
+
+# sysfs_write <num> <value>  — export as output if needed, then write value
+sysfs_write()
+{
+    local num="${1}" value="${2}"
+    if [ ! -d "/sys/class/gpio/gpio${num}" ]; then
+        echo "${num}" > /sys/class/gpio/export 2>/dev/null
+        echo "out" > "/sys/class/gpio/gpio${num}/direction" 2>/dev/null
+    fi
+    echo "${value}" > "/sys/class/gpio/gpio${num}/value"
+}
+
+# gset <name=value>...
+gset()
+{
+    local rc=0 kv name val num
+    if [ "${ENABLESYSFS}" == "true" ]; then
+        for kv in "$@"; do
+            name=${kv%=*}; val=${kv#*=}
+            num=$(sysfs_name_num "${name}") \
+                || { echo "${0}: *** Error: cannot resolve '${name}'"; continue; }
+            sysfs_write "${num}" "${val}"
+        done
+    else
+        timeout 0.3 "${GPIOSET}" --by-name "$@" || rc=$?
+        if [ "$rc" -ne 124 ] && [ "$rc" -ne 0 ]; then
+            echo "${0}: *** Error: gpioset $* failed (rc=$rc)"
+            return 1
+        fi
+    fi
+}
+
+# gpulse <name>  — drive line HIGH for 500ms, then LOW
+gpulse()
+{
+    local name="${1}" num
+    if [ "${ENABLESYSFS}" == "true" ]; then
+        num=$(sysfs_name_num "${name}") \
+            || { echo "${0}: *** Error: cannot resolve '${name}'"; return 1; }
+        sysfs_write "${num}" 1
+        sleep 0.5
+        echo 0 > "/sys/class/gpio/gpio${num}/value"
+    else
+        "${GPIOSET}" --toggle 500ms,0 --by-name "${name}=1" \
+            || echo "${0}: *** Error: pulse on ${name} failed"
+    fi
+}
+
+# wait_line <name>  — wait up to 5s for a named line to become usable
+
+wait_line()
+{
+    local name="${1}"
+    for _ in $(seq 1 50); do
+        if [ "${ENABLESYSFS}" == "true" ]; then
+            configure_gpiobase
+            sysfs_name_num "${name}" >/dev/null 2>&1 && return 0
+        else
+            "${GPIOINFO}" "${name}" >/dev/null 2>&1 && return 0
+        fi
+        sleep 0.1
+    done
+    echo "${0}: *** Error: gpio line '${name}' not available"
+    return 1
+}
+
+configure_led() {
+  echo "${0}: Configure: gpiochip=${1} led=${2}, state=${3}, active_level=${4}"
+  gpio_set "${1}" "${2}" "${3}" "${4}"
+}
+
+# gpio_set <chip> <line> <value> <active-level>  — set value by chip+line.
+gpio_set()
+{
+    local chip="${1}" line="${2}" value="${3}" low="${4}" rc=0
+    if [ "${ENABLESYSFS}" == "true" ]; then
+        local num=$((GPIOCHIPBASE[${chip}] + line))
+        sysfs_write "${num}" "${value}"
+    else
+        local args=()
+        [ "${low}" == "${GPIO_ACTIVE_LOW}" ] && args+=("--active-low")
+        timeout 0.3 "${GPIOSET}" "${args[@]}" -c "gpiochip${chip}" "${line}=${value}" || rc=$?
+        if [ "$rc" -ne 124 ] && [ "$rc" -ne 0 ]; then
+            echo "${0}: *** Error: gpioset gpiochip${chip} ${line}=${value} failed (rc=$rc)"
+            return 1
+        fi
+    fi
+}
+
+### end define functions ################################################
+
+### begin
+
+detect_backend
+
+if [ "${ENABLESYSFS}" == "true" ]; then
+    echo "${0}: Unexport gpio from sysfs"
+    unexport_sysfs
+    configure_gpiobase
+fi
+
+echo "${0}: Configure LEDs ..."
+for leds_parameters in "${LEDS[@]}"; do
+    # shellcheck disable=SC2086
+    configure_led ${leds_parameters}
+done
+
+if [[ -n "${ADDITIONALFUNC}" ]]; then
+    for func in ${ADDITIONALFUNC}; do
+        echo "${0}: Start additional init function ${func}"
+        ${func} || echo "${0}: *** Error: ${func} failed"
+    done
+fi
+
+echo "${0}: Initialization done"
+
+exit 0

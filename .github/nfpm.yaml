@@ -11,6 +11,9 @@ conflicts:
   - jethub-init
 replaces:
   - jethub-init
+  - armbian-bsp-cli-jethub@BOARD@
+  - armbian-bsp-cli-jethub@BOARD@-current
+  - armbian-bsp-cli-jethub@BOARD@-edge
 description: |
   JetHub @BOARD@ board init (GPIO/LED/zigbee) for Armbian.
   jethub-init entrypoint plus the @BOARD@ libjethubconfig.sh.

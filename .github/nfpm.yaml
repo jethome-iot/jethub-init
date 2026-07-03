@@ -28,3 +28,6 @@ contents:
     dst: /usr/lib/armbian/libjethubconfig.sh
   - src: armbian/jethub-initer.service
     dst: /lib/systemd/system/jethub-initer.service
+  - src: ../jethub-initer.service
+    dst: /lib/systemd/system/basic.target.wants/jethub-initer.service
+    type: symlink

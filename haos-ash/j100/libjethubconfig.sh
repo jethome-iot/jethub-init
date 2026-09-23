@@ -1,14 +1,10 @@
 #!/bin/sh
 # shellcheck disable=SC2034
 
-GPIOCHIPNUMBER=0
-GPIO_ACTIVE_LOW=0
-GPIO_ACTIVE_HIGH=1
-
 configure_leds() {
     echo "${0}: Configure LEDs ..."
-    configure_led ${GPIOCHIPNUMBER} 26 0 ${GPIO_ACTIVE_LOW}
-    configure_led ${GPIOCHIPNUMBER} 27 0 ${GPIO_ACTIVE_LOW}
+    # Active-low LEDs: 0 = off
+    gset --active-low LedRed=0 LedGreen=0
 }
 
 reset_zigbee() {

@@ -20,7 +20,7 @@ jobs:
           echo "VERSION=${v//-/\~}" >> "$GITHUB_ENV"
 
       - name: Render per-board nfpm configs
-        run: for b in j80 j100 j200; do sed "s/@BOARD@/$b/g" .github/nfpm.yaml > "nfpm-$b.yaml"; done
+        run: for b in j80 j100 j200 j310; do sed "s/@BOARD@/$b/g" .github/nfpm.yaml > "nfpm-$b.yaml"; done
 
       - name: Build armbian .deb (j80)
         uses: secondlife/action-nfpm@v2
@@ -46,10 +46,18 @@ jobs:
           config: nfpm-j200.yaml
           target: build/j200
 
+      - name: Build armbian .deb (j310)
+        uses: secondlife/action-nfpm@v2
+        with:
+          checkout: false
+          packager: deb
+          config: nfpm-j310.yaml
+          target: build/j310
+
       - name: Assemble release assets
         run: |
           mkdir -p dist
-          for b in j80 j100 j200; do
+          for b in j80 j100 j200 j310; do
             mv "build/$b"/*.deb "dist/jethub-init-${b}_${VERSION}.deb"
           done
           tar -czf "dist/jethub-init-haos_${VERSION}.tar.gz" haos-ash
@@ -62,6 +70,7 @@ jobs:
             dist/jethub-init-j80_${VERSION}.deb \
             dist/jethub-init-j100_${VERSION}.deb \
             dist/jethub-init-j200_${VERSION}.deb \
+            dist/jethub-init-j310_${VERSION}.deb \
             dist/jethub-init-haos_${VERSION}.tar.gz \
             --title "$GITHUB_REF_NAME" \
             --generate-notes

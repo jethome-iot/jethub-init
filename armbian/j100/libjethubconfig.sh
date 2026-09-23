@@ -1,16 +1,11 @@
 #!/bin/bash
 # shellcheck disable=SC2034
 
-GPIOCHIPNUMBER=0
-GPIO_ACTIVE_LOW=0
-
-# Set LED states
-LEDS=(
-    # LED RED
-    "${GPIOCHIPNUMBER} 26 0 ${GPIO_ACTIVE_LOW}"
-    # LED GREEN
-    "${GPIOCHIPNUMBER} 27 0 ${GPIO_ACTIVE_LOW}"
-)
+configure_leds() {
+    echo "${0}: Configure LEDs ..."
+    # Active-low LEDs: 0 = off
+    gset --active-low LedRed=0 LedGreen=0
+}
 
 reset_zigbee() {
     echo "${0}: Reset Zigbee module ..."
@@ -29,4 +24,4 @@ config_1wire() {
     sh -c "echo ds2482 0x18 > /sys/bus/i2c/devices/i2c-0/new_device" 2>/dev/null || true
 }
 
-ADDITIONALFUNC="reset_zigbee config_1wire"
+ADDITIONALFUNC="configure_leds reset_zigbee config_1wire"

@@ -66,14 +66,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            dist/jethub-init-j80_${VERSION}.deb \
-            dist/jethub-init-j100_${VERSION}.deb \
-            dist/jethub-init-j200_${VERSION}.deb \
-            dist/jethub-init-j310_${VERSION}.deb \
-            dist/jethub-init-haos_${VERSION}.tar.gz \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes
+          # The release already exists when it was created in the GitHub UI
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi
 
       - name: Cleanup workspace
         if: always()

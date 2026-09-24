@@ -16,12 +16,11 @@ Each variant folder has the same shape:
 
 ```
 <variant>/
-  jethub-init                 # main entrypoint script
   jethub-initer.service       # systemd unit (oneshot, runs jethub-init at boot)
-  j80/libjethubconfig.sh      # per-board init functions + ADDITIONALFUNC
-  j100/libjethubconfig.sh
-  j200/libjethubconfig.sh
-  j310/libjethubconfig.sh
+  j80/jethub-init             # the board's whole init, one self-contained script
+  j100/jethub-init
+  j200/jethub-init
+  j310/jethub-init
 ```
 
 Each variant ships its own `jethub-initer.service` because both the interpreter
@@ -36,16 +35,14 @@ unit in its rootfs overlay).
 | `armbian`    | Armbian, libgpiod v2 only (package depends on `gpiod (>= 2)`) | bash |
 | `haos-ash`   | Home Assistant OS, libgpiod v2 only | POSIX sh (ash) |
 
-`jethub-init` defines three line helpers, then sources the installed board's
-`libjethubconfig.sh` (armbian: from its own folder; haos-ash:
-`/usr/lib/jethome/`) and `/etc/default/jethub` (local overrides), and runs the
-functions listed in `ADDITIONALFUNC` (`configure_leds`, `reset_zigbee`,
-`config_1wire`, `reset_uxm1`, ...). The helpers, same in both variants:
-
-- `gset [gpioset options] <line=value>...` — set and exit, the pin keeps the
-  level. Lines are DT `gpio-line-names`, or offsets with `-c <chip>`.
-- `gpulse <name>` — 500 ms high pulse.
-- `wait_line <name>` — wait up to 5 s for a line to appear (i2c expanders).
+Each board's `jethub-init` stands alone: no code shared between boards, no
+`ADDITIONALFUNC`, no local overrides (the old Armbian BSP read
+`/etc/default/jethub`; these scripts ignore it). It runs the board's steps top
+to bottom; a failed step is logged and the rest still run. Lines are set with
+`gpioset --toggle 0 <line=value>...`: without `--toggle 0` the v2 gpioset keeps
+running to hold the lines and would stall the boot; with it gpioset sets them
+and exits, and the pin keeps the level. Lines are DT `gpio-line-names`, or
+offsets with `-c <chip>`.
 
 ## Conventions
 
@@ -55,9 +52,22 @@ functions listed in `ADDITIONALFUNC` (`configure_leds`, `reset_zigbee`,
   bashisms (arrays, `[[ ]]`, `declare -A`) in `haos-ash`.
 - These run early at boot as root and touch real hardware (`gpioset`, i2c).
   Be conservative: fail loud, never leave GPIOs half-configured.
-- Address lines by name; use `gset -c <chip>` with offsets only for lines the
-  DT does not name (currently the J80 LED and Z-Wave lines). A name only works if
+- Address lines by name; use `-c <chip>` with offsets only for lines the
+  DT does not name (currently the J80 LED line). A name only works if
   the board's DTB carries it — check the DTS before relying on a new one.
+- Init drives each radio module's BOOT/MODE line to the application level. The
+  module reads it only when its MCU starts, and that includes software resets
+  (Z2M, ZHA and flasher probes reset an EZSP NCP when they connect): a leftover
+  bootloader level sends it to the bootloader on the next such reset, and
+  setting the line back does not bring it out. Only J310 also pulses RESET (all
+  UXM slots at once, after MODE): the slots stay powered across a reboot, and
+  the pulse restarts the whole module, the MG21 behind the CP2102N included, so
+  it comes back to the application. The other boards do not reset. Polarity
+  differs per board — see the comment next to each line.
+- The unit waits only for `systemd-modules-load`, not for udev, so the GPIO
+  chips it drives must exist by then: the expander and its I2C bus built into
+  the kernel (J310 needs `CONFIG_AMLOGIC_I2C_MESON=y`; on Armbian, J200's
+  `gpio-pca953x` is still a module, so its UXM lines can be late).
 - Scripts are shellcheck-friendly; preserve existing `# shellcheck` directives.
 
 ## Checks
@@ -65,9 +75,9 @@ functions listed in `ADDITIONALFUNC` (`configure_leds`, `reset_zigbee`,
 There is no build. Validate edits with shellcheck before committing:
 
 ```sh
-shellcheck armbian/jethub-init armbian/j*/libjethubconfig.sh
+shellcheck armbian/j*/jethub-init
 # for haos-ash, lint as POSIX sh:
-shellcheck -s sh haos-ash/jethub-init haos-ash/j*/libjethubconfig.sh
+shellcheck -s sh haos-ash/j*/jethub-init
 ```
 
 ## Releases
@@ -80,8 +90,8 @@ shellcheck -s sh haos-ash/jethub-init haos-ash/j*/libjethubconfig.sh
   board, built with `nfpm` (`secondlife/action-nfpm`) from the single template
   `.github/nfpm.yaml`. The workflow `sed`s `@BOARD@` per board, then nfpm fills
   `${VERSION}` (tag minus the `v`) into both the package and the file name. Each
-  installs `jethub-init` + that board's `libjethubconfig.sh` into
-  `/usr/lib/armbian/` and `jethub-initer.service` into `/lib/systemd/system/`
+  installs that board's `jethub-init` into `/usr/lib/armbian/` and
+  `jethub-initer.service` into `/lib/systemd/system/`
   (matching armbian's existing BSP layout) and enables the unit via a
   `basic.target.wants` symlink. The packages provide/conflict/replace the
   virtual `jethub-init` (mutually exclusive), take these files over from the
@@ -91,12 +101,12 @@ shellcheck -s sh haos-ash/jethub-init haos-ash/j*/libjethubconfig.sh
   real names, so add any branch you start building; unversioned, so dpkg also
   keeps our copies across BSP upgrades), and depend on `gpiod (>= 2)`:
   releases whose archive only has gpiod v1 (Ubuntu noble) need gpiod 2.x from
-  the JetHome apt repo.
+  the JetHome apt repo. The BSP's old `/usr/lib/armbian/libjethubconfig.sh` may
+  stay behind; nothing reads it.
 - `jethub-init-haos_<ver>.tar.gz` — the `haos-ash/` tree (including its
   `jethub-initer.service`). The HAOS buildroot package (`package/jethub-init`)
-  fetches this repo by git and installs `haos-ash/jethub-init` plus the board's
-  `libjethubconfig.sh` into `/usr/lib/jethome/`; pin it to a release tag, not a
-  bare commit.
+  fetches this repo by git and installs the board's `haos-ash/<board>/jethub-init`
+  as `/usr/lib/jethome/jethub-init`; pin it to a release tag, not a bare commit.
 
 Board selection is by *which package you install* — no runtime detection, no
 maintainer scripts. There is no per-commit release; cut one by pushing a tag.

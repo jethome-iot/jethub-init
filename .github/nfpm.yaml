@@ -18,18 +18,13 @@ replaces:
   - armbian-bsp-cli-jethub@BOARD@-vendor
 description: |
   JetHub @BOARD@ hardware init (GPIO lines, LEDs, radio modules) for Armbian.
-  jethub-init entrypoint plus the @BOARD@ libjethubconfig.sh.
 depends:
   - gpiod (>= 2)
 contents:
-  - src: armbian/jethub-init
+  - src: armbian/@BOARD@/jethub-init
     dst: /usr/lib/armbian/jethub-init
     file_info:
       mode: 0755
-  - src: armbian/@BOARD@/libjethubconfig.sh
-    dst: /usr/lib/armbian/libjethubconfig.sh
-    file_info:
-      mode: 0644
   - src: armbian/jethub-initer.service
     dst: /lib/systemd/system/jethub-initer.service
     file_info:

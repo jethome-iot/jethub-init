@@ -1,5 +1,7 @@
 #!/bin/bash
 
+modprobe gpio-pca953x || echo "${0}: *** Error: Failed to load gpio-pca953x kernel module"
+
 # BOOT: 1 - application, 0 - bootloader
 echo "${0}: Set UXM modules to application mode ..."
 gpioset --toggle 0 UXM1_BOOT=1 UXM2_BOOT=1 ||

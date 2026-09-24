@@ -65,9 +65,10 @@ offsets with `-c <chip>`.
   it comes back to the application. The other boards do not reset. Polarity
   differs per board — see the comment next to each line.
 - The unit waits only for `systemd-modules-load`, not for udev, so the GPIO
-  chips it drives must exist by then: the expander and its I2C bus built into
-  the kernel (J310 needs `CONFIG_AMLOGIC_I2C_MESON=y`; on Armbian, J200's
-  `gpio-pca953x` is still a module, so its UXM lines can be late).
+  chips it drives must exist by then: built into the kernel (J310 needs
+  `CONFIG_AMLOGIC_I2C_MESON=y`) or loaded by the script itself (J200 runs
+  `modprobe gpio-pca953x`: the shared meson64 kernels, Armbian and HAOS alike,
+  build it as a module).
 - Scripts are shellcheck-friendly; preserve existing `# shellcheck` directives.
 
 ## Checks

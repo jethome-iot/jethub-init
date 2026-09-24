@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# BOOT: 1 - application, 0 - bootloader
+echo "${0}: Set UXM modules to application mode ..."
+gpioset --toggle 0 UXM1_BOOT=1 UXM2_BOOT=1 ||
+    echo "${0}: *** Error: Failed to set UXM modules to application mode"
+
+echo "${0}: Configure 1-Wire ..."
+modprobe ds2482 || echo "${0}: *** Error: Failed to load DS2482 kernel module"
+
+echo "${0}: Initialization done"

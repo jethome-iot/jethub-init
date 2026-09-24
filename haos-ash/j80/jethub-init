@@ -5,9 +5,9 @@ echo "${0}: Configure LEDs ..."
 gpioset --toggle 0 -c gpiochip1 73=0 ||
     echo "${0}: *** Error: Failed to configure LEDs"
 
-# BOOT: 1 - application, 0 - bootloader
+# BOOT (GPIOAO_9): 1 - application, 0 - bootloader
 echo "${0}: Set Zigbee module to application mode ..."
-gpioset --toggle 0 ZigBeeBOOT=1 ||
+gpioset --toggle 0 -c gpiochip0 9=1 ||
     echo "${0}: *** Error: Failed to set Zigbee module to application mode"
 
 echo "${0}: Configure Ethernet leds ..."

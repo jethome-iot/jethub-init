@@ -53,7 +53,7 @@ offsets with `-c <chip>`.
 - These run early at boot as root and touch real hardware (`gpioset`, i2c).
   Be conservative: fail loud, never leave GPIOs half-configured.
 - Address lines by name; use `-c <chip>` with offsets only for lines the
-  DT does not name (currently the J80 LED line). A name only works if
+  DT does not name (J80: the LED and the Zigbee BOOT line). A name only works if
   the board's DTB carries it — check the DTS before relying on a new one.
 - Init drives each radio module's BOOT/MODE line to the application level. The
   module reads it only when its MCU starts, and that includes software resets

@@ -21,11 +21,11 @@ description: |
 depends:
   - gpiod (>= 2)
 contents:
-  - src: armbian/@BOARD@/jethub-init
+  - src: "@BOARD@/jethub-init"
     dst: /usr/lib/armbian/jethub-init
     file_info:
       mode: 0755
-  - src: armbian/jethub-initer.service
+  - src: jethub-initer.service
     dst: /lib/systemd/system/jethub-initer.service
     file_info:
       mode: 0644

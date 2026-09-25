@@ -7,7 +7,7 @@ DefaultDependencies=no
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash /usr/lib/armbian/jethub-init
+ExecStart=/bin/sh /usr/lib/armbian/jethub-init
 TimeoutStartSec=25s
 
 [Install]

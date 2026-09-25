@@ -60,7 +60,10 @@ jobs:
           for b in j80 j100 j200 j310; do
             mv "build/$b"/*.deb "dist/jethub-init-${b}_${VERSION}.deb"
           done
-          tar -czf "dist/jethub-init-haos_${VERSION}.tar.gz" haos-ash
+          # Reproducible, so a rebuilt release asset keeps the hash HAOS pins
+          tar --sort=name --format=gnu --owner=0 --group=0 --numeric-owner --mode=go-w \
+            --mtime="@$(git log -1 --format=%ct)" --transform "s,^,jethub-init-${VERSION}/," \
+            -cf - j80 j100 j200 j310 | gzip -9n > "dist/jethub-init-haos_${VERSION}.tar.gz"
 
       - name: Publish release
         env:

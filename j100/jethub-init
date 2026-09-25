@@ -5,7 +5,7 @@ echo "${0}: Configure LEDs ..."
 gpioset --toggle 0 --active-low LedRed=0 LedGreen=0 ||
     echo "${0}: *** Error: Failed to configure LEDs"
 
-# BOOT: 1 - application, 0 - bootloader (read by the module when RESET is released)
+# BOOT: 1 - application, 0 - bootloader
 echo "${0}: Set Zigbee module to application mode ..."
 gpioset --toggle 0 ZigBeeBOOT=1 ||
     echo "${0}: *** Error: Failed to set Zigbee module to application mode"

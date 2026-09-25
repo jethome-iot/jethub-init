@@ -11,6 +11,6 @@ gpioset --toggle 0 -c gpiochip0 9=1 ||
     echo "${0}: *** Error: Failed to set Zigbee module to application mode"
 
 echo "${0}: Configure Ethernet leds ..."
-/usr/lib/jethome/jethub_set-eth_leds || echo "${0}: *** Error: jethub_set-eth_leds failed"
+/usr/sbin/jethub_set-eth_leds || echo "${0}: *** Error: jethub_set-eth_leds failed"
 
 echo "${0}: Initialization done"

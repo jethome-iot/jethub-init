@@ -4,36 +4,27 @@ Guidance for AI agents working in this repository.
 
 ## Overview
 
-`jethub-init` is a set of GPIO/LED/peripheral init scripts for JetHub
-**J80**, **J100**, **J200** and **J310** boards. The repository holds two parallel
-**variants** of the same logic, one per top-level folder. They are independent
-targets, not layers — a change usually belongs to *one* variant, and porting it
-to the other is a deliberate, separate step.
+`jethub-init` is the GPIO/LED/peripheral init for JetHub **J80**, **J100**,
+**J200** and **J310** boards: one POSIX `sh` script per board, the same for
+Armbian and Home Assistant OS. A release packs the scripts two ways: a `.deb`
+per board for Armbian and one tarball for HAOS.
 
 ## Layout
 
-Each variant folder has the same shape:
-
 ```
-<variant>/
-  jethub-initer.service       # systemd unit (oneshot, runs jethub-init at boot)
-  j80/jethub-init             # the board's whole init, one self-contained script
-  j100/jethub-init
-  j200/jethub-init
-  j310/jethub-init
+j80/jethub-init             # the board's whole init, one self-contained script
+j100/jethub-init
+j200/jethub-init
+j310/jethub-init
+jethub-initer.service       # Armbian's systemd unit (oneshot, runs jethub-init at boot)
+.github/nfpm.yaml           # Armbian package template
 ```
 
-Each variant ships its own `jethub-initer.service` because both the interpreter
-**and the install path** differ — armbian runs `/bin/bash /usr/lib/armbian/jethub-init`,
-haos-ash runs `/bin/sh /usr/lib/jethome/jethub-init`. The armbian package also
-ships the `basic.target.wants` symlink, so installing it enables the unit; on
-HAOS enabling is the OS build's job (the HAOS tree carries its own copy of the
-unit in its rootfs overlay).
-
-| Folder       | Variant                         | Shell        |
-|--------------|---------------------------------|--------------|
-| `armbian`    | Armbian, libgpiod v2 only (package depends on `gpiod (>= 2)`) | bash |
-| `haos-ash`   | Home Assistant OS, libgpiod v2 only | POSIX sh (ash) |
+On Armbian the package installs the script as `/usr/lib/armbian/jethub-init`
+and ships `jethub-initer.service` with its `basic.target.wants` symlink, so
+installing it enables the unit. HAOS installs the script as
+`/usr/lib/jethome/jethub-init`; its unit lives in the HAOS tree's rootfs overlay
+and enabling it is the OS build's job.
 
 Each board's `jethub-init` stands alone: no code shared between boards, no
 `ADDITIONALFUNC`, no local overrides (the old Armbian BSP read
@@ -42,14 +33,15 @@ to bottom; a failed step is logged and the rest still run. Lines are set with
 `gpioset --toggle 0 <line=value>...`: without `--toggle 0` the v2 gpioset keeps
 running to hold the lines and would stall the boot; with it gpioset sets them
 and exits, and the pin keeps the level. Lines are DT `gpio-line-names`, or
-offsets with `-c <chip>`.
+offsets with `-c <chip>`. Both systems use libgpiod v2 only.
 
 ## Conventions
 
-- Keep the two variants in sync **only when asked** — they intentionally
-  diverge (shell dialect, install paths). State which variant(s) you changed.
-- `armbian` is `#!/bin/bash`; `haos-ash` is POSIX `sh` — do not use
-  bashisms (arrays, `[[ ]]`, `declare -A`) in `haos-ash`.
+- The scripts are POSIX `sh`: dash runs them on Armbian, busybox ash on HAOS.
+  No bashisms (arrays, `[[ ]]`, `declare`, `local`).
+- A path a script uses must be the same on both systems: J80 calls
+  `/usr/sbin/jethub_set-eth_leds`, which the Armbian BSP and the HAOS overlay
+  both install there.
 - These run early at boot as root and touch real hardware (`gpioset`, i2c).
   Be conservative: fail loud, never leave GPIOs half-configured.
 - Address lines by name; use `-c <chip>` with offsets only for lines the
@@ -73,12 +65,11 @@ offsets with `-c <chip>`.
 
 ## Checks
 
-There is no build. Validate edits with shellcheck before committing:
+There is no build. Validate edits with shellcheck, as POSIX sh, before
+committing:
 
 ```sh
-shellcheck armbian/j*/jethub-init
-# for haos-ash, lint as POSIX sh:
-shellcheck -s sh haos-ash/j*/jethub-init
+shellcheck -s sh j*/jethub-init
 ```
 
 ## Releases
@@ -87,7 +78,7 @@ shellcheck -s sh haos-ash/j*/jethub-init
 **version-named** assets (pin a build to an exact version via the tagged URL,
 `.../releases/download/vX.Y.Z/<name>`):
 
-- `jethub-init-j80_<ver>.deb` / `-j100` / `-j200` / `-j310` — one armbian package per
+- `jethub-init-j80_<ver>.deb` / `-j100` / `-j200` / `-j310` — one Armbian package per
   board, built with `nfpm` (`secondlife/action-nfpm`) from the single template
   `.github/nfpm.yaml`. The workflow `sed`s `@BOARD@` per board, then nfpm fills
   `${VERSION}` (tag minus the `v`) into both the package and the file name. Each
@@ -96,7 +87,7 @@ shellcheck -s sh haos-ash/j*/jethub-init
   (matching armbian's existing BSP layout) and enables the unit via a
   `basic.target.wants` symlink. The packages provide/conflict/replace the
   virtual `jethub-init` (mutually exclusive), take these files over from the
-  Armbian BSP, which still ships the old sysfs versions (`Replaces:`
+  Armbian BSP, whose older versions ship the old sysfs ones (`Replaces:`
   `armbian-bsp-cli-jethub<board>` and one `-<branch>` variant per branch JetHub
   images are built with: current, edge, vendor and bleedingedge — dpkg needs
   real names, so add any branch you start building; unversioned, so dpkg also
@@ -104,10 +95,18 @@ shellcheck -s sh haos-ash/j*/jethub-init
   releases whose archive only has gpiod v1 (Ubuntu noble) need gpiod 2.x from
   the JetHome apt repo. The BSP's old `/usr/lib/armbian/libjethubconfig.sh` may
   stay behind; nothing reads it.
-- `jethub-init-haos_<ver>.tar.gz` — the `haos-ash/` tree (including its
-  `jethub-initer.service`). The HAOS buildroot package (`package/jethub-init`)
-  fetches this repo by git and installs the board's `haos-ash/<board>/jethub-init`
-  as `/usr/lib/jethome/jethub-init`; pin it to a release tag, not a bare commit.
+- `jethub-init-haos_<ver>.tar.gz` — the board folders under a
+  `jethub-init-<ver>/` top directory. It is built reproducibly (sorted names,
+  fixed owner and modes, commit time, `gzip -n`), so a rebuilt asset keeps the
+  hash HAOS pins. The HAOS buildroot package (`package/jethub-init`) downloads
+  it from the release and installs the board's `<board>/jethub-init` as
+  `/usr/lib/jethome/jethub-init`; bump its version and `.hash` together.
+
+In armbian-build the BSP no longer ships the init and depends on its board's
+package instead (`EXTRA_BSPDEPS` in `config/sources/families/jethub.conf`), so
+new images and BSP upgrades pull it in from the JetHome repo, which is added
+early for that. A package has to be in repo.jethome.com, with gpiod 2 where the
+release lacks it, before images are built or a BSP released with that dependency.
 
 Board selection is by *which package you install* — no runtime detection, no
 maintainer scripts. There is no per-commit release; cut one by pushing a tag.

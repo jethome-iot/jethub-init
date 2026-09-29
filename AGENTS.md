@@ -20,9 +20,12 @@ jethub-initer.service       # Armbian's systemd unit (oneshot, runs jethub-init 
 .github/nfpm.yaml           # Armbian package template
 ```
 
-On Armbian the package installs the script as `/usr/lib/armbian/jethub-init`
-and ships `jethub-initer.service` with its `basic.target.wants` symlink, so
-installing it enables the unit. HAOS installs the script as
+On Armbian the script runs as `/usr/lib/armbian/jethub-init` from
+`jethub-initer.service`. For now the Armbian BSP ships both: armbian-build's
+`packages/bsp/jethub/jethub<board>/jethub-init` and
+`packages/bsp/jethub/jethub-initer.service` are copies of the files here, so
+keep them in sync, and the image build enables the unit. The per-board `.deb`
+would install the same files, but images do not use it yet. HAOS installs the script as
 `/usr/lib/jethome/jethub-init`; its unit lives in the HAOS tree's rootfs overlay
 and enabling it is the OS build's job.
 
@@ -87,7 +90,7 @@ shellcheck -s sh j*/jethub-init
   (matching armbian's existing BSP layout) and enables the unit via a
   `basic.target.wants` symlink. The packages provide/conflict/replace the
   virtual `jethub-init` (mutually exclusive), take these files over from the
-  Armbian BSP, whose older versions ship the old sysfs ones (`Replaces:`
+  Armbian BSP, which ships its own copies (`Replaces:`
   `armbian-bsp-cli-jethub<board>` and one `-<branch>` variant per branch JetHub
   images are built with: current, edge, vendor and bleedingedge — dpkg needs
   real names, so add any branch you start building; unversioned, so dpkg also
@@ -102,11 +105,11 @@ shellcheck -s sh j*/jethub-init
   it from the release and installs the board's `<board>/jethub-init` as
   `/usr/lib/jethome/jethub-init`; bump its version and `.hash` together.
 
-In armbian-build the BSP no longer ships the init and depends on its board's
-package instead (`EXTRA_BSPDEPS` in `config/sources/families/jethub.conf`), so
-new images and BSP upgrades pull it in from the JetHome repo, which is added
-early for that. A package has to be in repo.jethome.com, with gpiod 2 where the
-release lacks it, before images are built or a BSP released with that dependency.
+armbian-build does not use the packages yet (see Layout). The switch is
+prepared in `config/sources/families/jethub.conf`: the JetHome repo is added
+early by a `custom_apt_repo` hook, and `EXTRA_BSPDEPS="jethub-init-<board>"` is
+there, commented out. Turning it on needs the packages in repo.jethome.com, with
+gpiod 2 where the release lacks it, and the BSP copies removed.
 
 Board selection is by *which package you install* — no runtime detection, no
 maintainer scripts. There is no per-commit release; cut one by pushing a tag.

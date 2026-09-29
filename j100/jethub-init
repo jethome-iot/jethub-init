@@ -5,10 +5,13 @@ echo "${0}: Configure LEDs ..."
 gpioset --toggle 0 --active-low LedRed=0 LedGreen=0 ||
     echo "${0}: *** Error: Failed to configure LEDs"
 
-# BOOT: 1 - application, 0 - bootloader
-echo "${0}: Set Zigbee module to application mode ..."
-gpioset --toggle 0 ZigBeeBOOT=1 ||
-    echo "${0}: *** Error: Failed to set Zigbee module to application mode"
+echo "${0}: Set Zigbee module to application mode, reset it ..."
+if gpioset --toggle 0 ZigBeeBOOT=1; then
+    gpioset --toggle 500ms,0 ZigBeeRESET=1 ||
+        echo "${0}: *** Error: Zigbee reset pulse failed"
+else
+    echo "${0}: *** Error: Failed to set Zigbee module to application mode, reset skipped"
+fi
 
 echo "${0}: Configure 1-Wire ..."
 if modprobe ds2482; then

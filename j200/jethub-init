@@ -3,7 +3,8 @@
 modprobe gpio-pca953x || echo "${0}: *** Error: Failed to load gpio-pca953x kernel module"
 
 echo "${0}: Set UXM modules to application mode, reset them ..."
-if gpioset --toggle 0 UXM1_BOOT=1 UXM2_BOOT=1; then
+# BOOT: 0 - application, 1 - bootloader (inverted on the base board)
+if gpioset --toggle 0 UXM1_BOOT=0 UXM2_BOOT=0; then
     gpioset --toggle 500ms,0 UXM1_RESET=1 UXM2_RESET=1 ||
         echo "${0}: *** Error: UXM reset pulse failed"
 else
